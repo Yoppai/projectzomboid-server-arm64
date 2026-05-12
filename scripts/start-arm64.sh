@@ -38,6 +38,10 @@ log "Memory: Xmx=${XMX_VAL} Xms=${XMS_VAL}"
 # Patch server JSON with resolved values
 patch_memory_json "$XMX_VAL" "$XMS_VAL"
 
+# Install PanelBridge mod (if enabled) — runs before INI patching
+# If download fails, PANEL_BRIDGE_ENABLED is set to false so INI stays clean
+install_panelbridge || true
+
 # Patch server.ini with full env settings (gated by GENERATE_SETTINGS)
 # Admin/RCON/minimal settings always written for server start
 patch_server_ini
@@ -57,14 +61,22 @@ SERVER_PID=0
 shutdown_handler() {
     log "SIGTERM received — initiating graceful shutdown"
 
-    # 1) Try RCON quit
+    # 1) Try explicit world save before shutdown
+    if rcon_send "save"; then
+        log "RCON save command sent successfully"
+        sleep 3
+    else
+        log "RCON save failed — continuing shutdown"
+    fi
+
+    # 2) Try RCON quit
     if rcon_send "quit"; then
         log "RCON quit command sent successfully"
     else
         log "RCON quit failed — falling back to direct SIGTERM"
     fi
 
-    # 2) Wait for server to exit (up to 30s)
+    # 3) Wait for server to exit (up to 30s)
     if [[ $SERVER_PID -gt 0 ]]; then
         local timeout=30
         local elapsed=0
@@ -77,12 +89,12 @@ shutdown_handler() {
             elapsed=$((elapsed + 1))
         done
 
-        # 3) Force SIGTERM
+        # 4) Force SIGTERM
         log "Server still alive after ${timeout}s — sending SIGTERM"
         kill -TERM "$SERVER_PID" 2>/dev/null || true
         sleep 5
 
-        # 4) Last resort: SIGKILL
+        # 5) Last resort: SIGKILL
         if kill -0 "$SERVER_PID" 2>/dev/null; then
             log "Server still alive — sending SIGKILL"
             kill -KILL "$SERVER_PID" 2>/dev/null || true

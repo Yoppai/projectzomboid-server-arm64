@@ -28,13 +28,13 @@ ENV GOOS=${TARGETOS:-linux} \
     GOARCH=${TARGETARCH:-arm64} \
     CGO_ENABLED=0
 
-RUN go build -ldflags="-s -w" -o /bin/rcon ./cmd/rcon/ && \
+RUN go build -ldflags="-s -w" -o /bin/rcon ./cmd/gorcon/ && \
     file /bin/rcon
 
 # =============================================================================
 # Stage 2: Final ARM64 runtime image
 # =============================================================================
-FROM --platform=$TARGETPLATFORM sonroyaalmerol/steamcmd-arm64:root-bookworm
+FROM sonroyaalmerol/steamcmd-arm64:root-bookworm@sha256:4e09bdb6723db7aca5142808e32c08873f836d28012b8696913770987741f6e6
 
 # --- Build-time defaults (overridable via --build-arg) ---
 ARG PUID=1000
@@ -42,7 +42,6 @@ ARG PGID=1000
 ARG MEMORY=2G
 ARG BRANCH=""
 ARG RCON_PORT=27015
-ARG RCON_PASSWORD="changeme"
 ARG UPDATE_ON_START=true
 ARG USE_JAVA_FALLBACK=false
 ARG BOX64_DYNAREC_BIGBLOCK=1
@@ -56,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gosu \
         jq \
         netcat-openbsd \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Copy cross-compiled RCON binary ---
@@ -88,7 +88,6 @@ ENV PUID=${PUID} \
     MEMORY=${MEMORY} \
     BRANCH=${BRANCH} \
     RCON_PORT=${RCON_PORT} \
-    RCON_PASSWORD=${RCON_PASSWORD} \
     UPDATE_ON_START=${UPDATE_ON_START} \
     USE_JAVA_FALLBACK=${USE_JAVA_FALLBACK} \
     BOX64_DYNAREC_BIGBLOCK=${BOX64_DYNAREC_BIGBLOCK} \
@@ -102,5 +101,8 @@ ENV PUID=${PUID} \
     ARM64_DEVICE= \
     BACKUPS_ON_START=true \
     BACKUPS_ON_VERSION_CHANGE=true
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=5 \
+    CMD nc -z 127.0.0.1 "${RCON_PORT:-27015}" || exit 1
 
 ENTRYPOINT ["/opt/pz/scripts/init.sh"]
