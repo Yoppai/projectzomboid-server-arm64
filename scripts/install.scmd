@@ -1,0 +1,54 @@
+#!/bin/bash
+set -e
+
+# =============================================================================
+# install.scmd — SteamCMD app 380870 install/update
+# Called from init.sh when UPDATE_ON_START=true
+# Supports branch selection via BRANCH env var (SERVER_BRANCH alias)
+# =============================================================================
+
+source /opt/pz/scripts/functions.sh
+
+log "=== SteamCMD Install/Update ==="
+
+# Branch: BRANCH primary, SERVER_BRANCH backwards-compat alias
+BRANCH="${BRANCH:-${SERVER_BRANCH:-}}"
+
+# Build SteamCMD command with guaranteed install path
+STEAMCMD_BIN=$(command -v steamcmd || echo "/usr/games/steamcmd")
+STEAMCMD_CMD="${STEAMCMD_BIN} +login anonymous +force_install_dir /project-zomboid +app_update 380870"
+
+if [[ -n "$BRANCH" ]]; then
+    STEAMCMD_CMD="${STEAMCMD_CMD} -beta ${BRANCH}"
+    log "Using branch: ${BRANCH}"
+else
+    log "Using stable (no branch)"
+fi
+
+STEAMCMD_CMD="${STEAMCMD_CMD} +quit"
+
+log "Running: ${STEAMCMD_CMD}"
+eval "${STEAMCMD_CMD}"
+STEAMCMD_EXIT=$?
+
+if [[ $STEAMCMD_EXIT -ne 0 ]]; then
+    log "ERROR: SteamCMD exited with code ${STEAMCMD_EXIT}"
+    exit $STEAMCMD_EXIT
+fi
+
+# Create symlink from Steam default path to /project-zomboid
+STEAM_PZ_DIR="${STEAM_PZ_DIR:-/home/steam/Steam/steamapps/common/ProjectZomboid}"
+
+if [[ -d "$STEAM_PZ_DIR" ]]; then
+    # Only symlink if /project-zomboid is empty or not a directory
+    if [[ ! -d /project-zomboid ]] || [[ -z "$(ls -A /project-zomboid 2>/dev/null)" ]]; then
+        rm -rf /project-zomboid 2>/dev/null
+        ln -sfn "$STEAM_PZ_DIR" /project-zomboid
+        log "Symlinked /project-zomboid -> ${STEAM_PZ_DIR}"
+    fi
+else
+    log "WARNING: Server directory not found at ${STEAM_PZ_DIR}"
+    log "SteamCMD may have used a different path; check container"
+fi
+
+log "Install/update complete"
