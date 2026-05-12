@@ -14,6 +14,7 @@ ARG RCON_CLI_VERSION=v0.10.3
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
+        file \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
