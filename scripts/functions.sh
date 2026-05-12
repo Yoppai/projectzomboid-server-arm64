@@ -88,6 +88,46 @@ wait_for_rcon_port() {
 }
 
 # -------------------------------------------------------------------
+# PanelBridge mod installation
+# -------------------------------------------------------------------
+# Downloads PanelBridge mod files from GitHub when enabled.
+# Gracefully degrades on failure (network errors).
+# -------------------------------------------------------------------
+install_panelbridge() {
+    [[ "${PANEL_BRIDGE_ENABLED,,}" != "true" ]] && return 0
+
+    local version="${PANEL_BRIDGE_VERSION:-v1.0.26}"
+    if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log "WARN: PanelBridge version '$version' invalid, falling back to v1.0.26"
+        version="v1.0.26"
+    fi
+
+    local base="https://raw.githubusercontent.com/fpsacha/zomboid-control-panel/${version}"
+    local dir="/project-zomboid/mods/PanelBridge"
+
+    mkdir -p "${dir}/media/lua/server"
+
+    curl -fsSL --retry 3 --retry-delay 2 --max-time 15 \
+        -o "${dir}/mod.info" \
+        "${base}/mod.info" || {
+        log "ERROR: PanelBridge mod.info download failed, disabling PanelBridge for this run"
+        export PANEL_BRIDGE_ENABLED=false
+        return 1
+    }
+
+    curl -fsSL --retry 3 --retry-delay 2 --max-time 15 \
+        -o "${dir}/media/lua/server/PanelBridge.lua" \
+        "${base}/media/lua/server/PanelBridge.lua" || {
+        log "ERROR: PanelBridge.lua download failed, disabling PanelBridge for this run"
+        export PANEL_BRIDGE_ENABLED=false
+        return 1
+    }
+
+    export PANEL_BRIDGE_INSTALLED=true
+    log "PanelBridge ${version} installed"
+}
+
+# -------------------------------------------------------------------
 # Env-to-INI mapping
 # -------------------------------------------------------------------
 # Returns lines of: INI_KEY=ENV_VAR_NAME
@@ -313,6 +353,11 @@ INI
         _ini_set_key "$ini_key" "$val"
     done < <(env_to_ini_map)
 
+    # PanelBridge: force DoLuaChecksum=false when enabled
+    if [[ "${PANEL_BRIDGE_ENABLED,,}" == "true" ]]; then
+        _ini_set_key "DoLuaChecksum" "false"
+    fi
+
     # 2) Process anti-cheat entries
     while IFS='=' read -r ini_key env_name; do
         local val="${!env_name-}"
@@ -324,12 +369,54 @@ INI
         _ini_set_key "$ini_key" "$val"
     done < <(env_to_ini_anticheat_map)
 
-    # 3) Mods and WorkshopItems — special handling: only write if non-empty,
-    #    log a warning when mods are enabled
+    # 3) Mods and WorkshopItems — special handling
+    #    PanelBridge appended automatically when enabled (deduplicated)
+    #    PanelBridge removed from INI when disabled (rollback)
+    #    Box64 native-library warning suppressed when Mods is only PanelBridge
     local mods_val="${MODS-}"
+    if [[ "${PANEL_BRIDGE_ENABLED,,}" == "true" ]]; then
+        if [[ -n "$mods_val" ]]; then
+            [[ ";${mods_val};" != *";PanelBridge;"* ]] && mods_val="${mods_val};PanelBridge"
+        else
+            mods_val="PanelBridge"
+        fi
+    else
+        # Rollback: remove PanelBridge from MODS when PB is disabled
+        # Only clean INI if user did NOT set MODS explicitly (mods_val is empty)
+        # If user set MODS, their value is authoritative (already validated no PanelBridge)
+        if [[ -z "$mods_val" ]]; then
+            local current_mods
+            current_mods=$(grep -i '^Mods=' "$tmp_ini" 2>/dev/null | head -1 | cut -d= -f2-)
+            if [[ -n "$current_mods" ]]; then
+                # Remove PanelBridge from semicolon-separated list
+                local cleaned=""
+                local IFS_save="$IFS"
+                IFS=';'
+                for m in $current_mods; do
+                    [[ -z "$m" ]] && continue
+                    [[ "$m" == "PanelBridge" ]] && continue
+                    cleaned="${cleaned}${cleaned:+;}${m}"
+                done
+                IFS="$IFS_save"
+                if [[ "$cleaned" != "$current_mods" ]]; then
+                    if [[ -n "$cleaned" ]]; then
+                        mods_val="$cleaned"
+                        log "INFO: PanelBridge removed from Mods (rollback)"
+                    else
+                        # Mods was only PanelBridge — remove the key entirely
+                        sed -i '/^Mods=/Id' "$tmp_ini"
+                        log "INFO: PanelBridge-only Mods removed (rollback)"
+                    fi
+                fi
+            fi
+        fi
+    fi
     if [[ -n "$mods_val" ]]; then
-        log "WARNING: Mods enabled via env — Mods=${mods_val}"
-        log "  Mods with native x86_64 libraries may crash under Box64"
+        if [[ "$mods_val" == "PanelBridge" ]]; then
+            log "INFO: PanelBridge (Lua-only) enabled"
+        else
+            log "WARNING: Mods with native libs may crash under Box64 — Mods=${mods_val}"
+        fi
         _ini_set_key "Mods" "$mods_val"
     fi
 

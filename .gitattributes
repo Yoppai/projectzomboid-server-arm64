@@ -1,0 +1,11 @@
+* text=auto
+
+# Runtime scripts must stay LF for Linux containers.
+*.sh text eol=lf
+*.scmd text eol=lf
+
+# Keep Docker/Compose/config files normalized.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
