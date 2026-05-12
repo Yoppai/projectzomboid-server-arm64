@@ -1,0 +1,31 @@
+# Openspec/SDD artifacts
+openspec/
+
+# CI/CD workflows — not needed in Docker build context
+.github/
+
+# Version control
+.git/
+.gitignore
+
+# Docs — large, not needed at build
+README.md
+*.md
+
+# Local env files — never ship
+.env
+.env.local
+.env.*
+
+# IDE/OS garbage
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmp/
+temp/
