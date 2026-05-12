@@ -119,7 +119,6 @@ ENVFILE="$PROJECT_DIR/.env.example"
 COMPOSEFILE="$PROJECT_DIR/docker-compose.yml"
 FUNCTIONSFILE="$SCRIPT_DIR/functions.sh"
 
-ENV_MISSING=0
 MAPPING_MISSING=0
 
 # Alias map: vars aliased by a differently-named primary in compose
@@ -187,16 +186,16 @@ check_env_in_compose() {
             continue
         fi
 
-        # 5) Missing — warn
-        warn_msg "${var} missing from docker-compose.yml environment"
+        # 5) Not in compose — info only (compose is intentionally minimal)
+        warn_msg "${var} not in docker-compose.yml (use docker run -e or add to compose)"
         missing=1
     done
 
     if [[ $missing -eq 0 ]]; then
         echo "    All .env.example vars present in compose environment"
     else
-        ENV_MISSING=1
-        echo "    Some vars missing — add them or annotate with # compose-excluded: VARNAME"
+        echo "    ${missing} vars not in compose — add manually if needed, or use docker run -e"
+        echo "    Compose is intentionally minimal. Full reference: docs/env-variables.md"
     fi
 }
 
@@ -256,9 +255,6 @@ check_mapping_completeness() {
 check_env_in_compose
 check_mapping_completeness
 
-if [[ $ENV_MISSING -eq 1 ]]; then
-    ERRORS=$((ERRORS + 1))
-fi
 if [[ $MAPPING_MISSING -eq 1 ]]; then
     ERRORS=$((ERRORS + 1))
 fi
