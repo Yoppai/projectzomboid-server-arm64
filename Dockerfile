@@ -57,6 +57,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         jq \
         netcat-openbsd \
         curl \
+        file \
+        libsm6 \
+        libice6 \
+        libx11-6 \
+        libx11-dev \
+        libxext6 \
+        libxext-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # sonroyaalmerol/steamcmd-arm64 stores SteamCMD under /home/steam/steamcmd.

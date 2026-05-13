@@ -19,13 +19,15 @@ log "========================================================"
 
 # --- Box64 dynarec tuning ---
 SERVER_DIR="/project-zomboid"
+PZ_JAVA_PATH="${SERVER_DIR}/jre64/bin:${SERVER_DIR}/jre/bin:${SERVER_DIR}/java/bin"
 export BOX64_DYNAREC_BIGBLOCK=${BOX64_DYNAREC_BIGBLOCK:-1}
 export BOX64_DYNAREC_BLEEDING_EDGE=${BOX64_DYNAREC_BLEEDING_EDGE:-0}
 export BOX64_DYNAREC_BB_LOOP=${BOX64_DYNAREC_BB_LOOP:-1}
 export BOX64_DYNAREC_FORWARD=${BOX64_DYNAREC_FORWARD:-1}
 export BOX64_DYNAREC_STRONGMEM=${BOX64_DYNAREC_STRONGMEM:-1}
-export BOX64_PATH="/usr/local/bin:/usr/bin:/bin"
-PZ_LIBRARY_PATH="${SERVER_DIR}:${SERVER_DIR}/linux64:${SERVER_DIR}/natives"
+export BOX64_PATH="${PZ_JAVA_PATH}:/usr/local/bin:/usr/bin:/bin"
+export PATH="${PZ_JAVA_PATH}:${PATH}"
+PZ_LIBRARY_PATH="${SERVER_DIR}:${SERVER_DIR}/linux64:${SERVER_DIR}/natives:${SERVER_DIR}/jre64/lib:${SERVER_DIR}/jre64/lib/server:${SERVER_DIR}/jre/lib:${SERVER_DIR}/jre/lib/server"
 export BOX64_LD_LIBRARY_PATH="${PZ_LIBRARY_PATH}:${BOX64_LD_LIBRARY_PATH:-/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/local/lib}"
 export LD_LIBRARY_PATH="${PZ_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
 
