@@ -90,41 +90,106 @@ wait_for_rcon_port() {
 # -------------------------------------------------------------------
 # PanelBridge mod installation
 # -------------------------------------------------------------------
-# Downloads PanelBridge mod files from GitHub when enabled.
-# Gracefully degrades on failure (network errors).
+# Downloads PanelBridge mod files from a pinned GitHub source archive when enabled.
+# Gracefully degrades on failure and disables bridge effects for the current run.
 # -------------------------------------------------------------------
 install_panelbridge() {
-    [[ "${PANEL_BRIDGE_ENABLED,,}" != "true" ]] && return 0
+    export PANEL_BRIDGE_INSTALLED=false
+
+    if [[ "${PANEL_BRIDGE_ENABLED,,}" != "true" ]]; then
+        log "PanelBridge disabled — skipping download/install"
+        return 0
+    fi
 
     local version="${PANEL_BRIDGE_VERSION:-v1.0.26}"
     if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        log "WARN: PanelBridge version '$version' invalid, falling back to v1.0.26"
-        version="v1.0.26"
+        log "ERROR: PanelBridge version '$version' invalid; expected vX.Y.Z"
+        export PANEL_BRIDGE_ENABLED=false
+        return 1
     fi
 
-    local base="https://raw.githubusercontent.com/fpsacha/zomboid-control-panel/${version}"
-    local dir="/project-zomboid/mods/PanelBridge"
+    local source_url="${PANEL_BRIDGE_SOURCE_URL:-https://github.com/fpsacha/zomboid-control-panel/archive/refs/tags/${version}.tar.gz}"
+    local checksum="${PANEL_BRIDGE_SHA256:-}"
+    local project_zomboid_dir="${PROJECT_ZOMBOID_DIR:-/project-zomboid}"
+    local target_dir="${project_zomboid_dir}/mods/PanelBridge"
+    local parent_dir staging_dir backup_dir tmp_dir archive extract_dir source_dir
 
-    mkdir -p "${dir}/media/lua/server"
-
-    curl -fsSL --retry 3 --retry-delay 2 --max-time 15 \
-        -o "${dir}/mod.info" \
-        "${base}/mod.info" || {
-        log "ERROR: PanelBridge mod.info download failed, disabling PanelBridge for this run"
+    if ! command -v curl &>/dev/null; then
+        log "ERROR: curl not found; cannot download PanelBridge"
         export PANEL_BRIDGE_ENABLED=false
+        return 1
+    fi
+    if [[ -n "$checksum" ]] && ! command -v sha256sum &>/dev/null; then
+        log "ERROR: PANEL_BRIDGE_SHA256 set but sha256sum not found"
+        export PANEL_BRIDGE_ENABLED=false
+        return 1
+    fi
+    if ! command -v tar &>/dev/null; then
+        log "ERROR: tar not found; cannot extract PanelBridge archive"
+        export PANEL_BRIDGE_ENABLED=false
+        return 1
+    fi
+
+    tmp_dir="$(mktemp -d)"
+    archive="${tmp_dir}/panelbridge.tar.gz"
+    extract_dir="${tmp_dir}/extract"
+    mkdir -p "$extract_dir"
+
+    _panelbridge_fail() {
+        local message="$1"
+        log "ERROR: ${message}; disabling PanelBridge for this run"
+        export PANEL_BRIDGE_ENABLED=false
+        export PANEL_BRIDGE_INSTALLED=false
+        rm -rf "$tmp_dir"
         return 1
     }
 
-    curl -fsSL --retry 3 --retry-delay 2 --max-time 15 \
-        -o "${dir}/media/lua/server/PanelBridge.lua" \
-        "${base}/media/lua/server/PanelBridge.lua" || {
-        log "ERROR: PanelBridge.lua download failed, disabling PanelBridge for this run"
-        export PANEL_BRIDGE_ENABLED=false
-        return 1
-    }
+    log "Downloading PanelBridge ${version} source archive"
+    curl -fsSL --retry 3 --retry-delay 2 --max-time 60 \
+        -o "$archive" \
+        "$source_url" || { _panelbridge_fail "PanelBridge archive download failed"; return 1; }
+
+    if [[ -n "$checksum" ]]; then
+        printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c - \
+            || { _panelbridge_fail "PanelBridge archive checksum mismatch"; return 1; }
+    fi
+
+    tar -xzf "$archive" -C "$extract_dir" \
+        || { _panelbridge_fail "PanelBridge archive extraction failed"; return 1; }
+
+    source_dir="$(find "$extract_dir" -path '*/pz-mod/PanelBridge' -type d | head -n 1)"
+    if [[ -z "$source_dir" ]]; then
+        _panelbridge_fail "PanelBridge path pz-mod/PanelBridge not found in archive"
+    fi
+    if [[ ! -f "${source_dir}/mod.info" ]]; then
+        _panelbridge_fail "PanelBridge mod.info missing in archive"
+    fi
+    if ! find "${source_dir}/media/lua/server" -maxdepth 1 -type f -name '*.lua' | grep -q .; then
+        _panelbridge_fail "PanelBridge server Lua files missing in archive"
+    fi
+
+    parent_dir="$(dirname "$target_dir")"
+    staging_dir="${parent_dir}/PanelBridge.tmp.$$"
+    backup_dir="${parent_dir}/PanelBridge.old.$$"
+    mkdir -p "$parent_dir"
+    rm -rf "$staging_dir" "$backup_dir"
+    cp -a "$source_dir" "$staging_dir" \
+        || { _panelbridge_fail "PanelBridge staging copy failed"; return 1; }
+
+    if [[ -d "$target_dir" ]]; then
+        mv "$target_dir" "$backup_dir" \
+            || { _panelbridge_fail "PanelBridge existing install backup failed"; return 1; }
+    fi
+    mv "$staging_dir" "$target_dir" \
+        || {
+            [[ -d "$backup_dir" ]] && mv "$backup_dir" "$target_dir" 2>/dev/null || true
+            _panelbridge_fail "PanelBridge atomic install failed"
+        }
+
+    rm -rf "$backup_dir" "$tmp_dir"
 
     export PANEL_BRIDGE_INSTALLED=true
-    log "PanelBridge ${version} installed"
+    log "PanelBridge ${version} installed from pinned source archive"
 }
 
 # -------------------------------------------------------------------
@@ -353,8 +418,14 @@ INI
         _ini_set_key "$ini_key" "$val"
     done < <(env_to_ini_map)
 
-    # PanelBridge: force DoLuaChecksum=false when enabled
-    if [[ "${PANEL_BRIDGE_ENABLED,,}" == "true" ]]; then
+    local panelbridge_active=false
+    local project_zomboid_dir="${PROJECT_ZOMBOID_DIR:-/project-zomboid}"
+    if [[ "${PANEL_BRIDGE_ENABLED,,}" == "true" && "${PANEL_BRIDGE_INSTALLED,,}" == "true" && -f "${project_zomboid_dir}/mods/PanelBridge/mod.info" ]]; then
+        panelbridge_active=true
+    fi
+
+    # PanelBridge: force DoLuaChecksum=false only when install succeeded and is active
+    if [[ "$panelbridge_active" == "true" ]]; then
         _ini_set_key "DoLuaChecksum" "false"
     fi
 
@@ -374,7 +445,7 @@ INI
     #    PanelBridge removed from INI when disabled (rollback)
     #    Box64 native-library warning suppressed when Mods is only PanelBridge
     local mods_val="${MODS-}"
-    if [[ "${PANEL_BRIDGE_ENABLED,,}" == "true" ]]; then
+    if [[ "$panelbridge_active" == "true" ]]; then
         if [[ -n "$mods_val" ]]; then
             [[ ";${mods_val};" != *";PanelBridge;"* ]] && mods_val="${mods_val};PanelBridge"
         else
