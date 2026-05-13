@@ -17,10 +17,25 @@ BRANCH="${BRANCH:-${SERVER_BRANCH:-}}"
 # Resolve SteamCMD. Debian packages expose /usr/games/steamcmd, while
 # sonroyaalmerol/steamcmd-arm64 exposes /home/steam/steamcmd/steamcmd.sh.
 resolve_steamcmd() {
-    local candidate
+    local candidate resolved
+
+    normalize_candidate() {
+        local path="$1"
+        resolved="$(readlink -f "$path" 2>/dev/null || echo "$path")"
+
+        # steamcmd.sh resolves its own root from $0. If executed through a
+        # symlink like /usr/games/steamcmd -> /home/steam/.../steamcmd.sh, it
+        # looks for /usr/games/linux32/steamcmd and Box86 fails. Always return
+        # the real steamcmd.sh path when a candidate points to it.
+        if [[ "$(basename "$resolved")" == "steamcmd.sh" ]]; then
+            echo "$resolved"
+        else
+            echo "$path"
+        fi
+    }
 
     if command -v steamcmd >/dev/null 2>&1; then
-        command -v steamcmd
+        normalize_candidate "$(command -v steamcmd)"
         return 0
     fi
 
@@ -31,7 +46,7 @@ resolve_steamcmd() {
         /opt/steamcmd/steamcmd.sh \
         /root/steamcmd/steamcmd.sh; do
         if [[ -x "$candidate" ]]; then
-            echo "$candidate"
+            normalize_candidate "$candidate"
             return 0
         fi
     done
