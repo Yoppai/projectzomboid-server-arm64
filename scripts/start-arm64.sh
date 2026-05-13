@@ -20,13 +20,36 @@ log "========================================================"
 # --- Box64 dynarec tuning ---
 SERVER_DIR="/project-zomboid"
 PZ_JAVA_PATH="${SERVER_DIR}/jre64/bin:${SERVER_DIR}/jre/bin:${SERVER_DIR}/java/bin"
+PZ_JAVA_BIN=""
+for java_candidate in \
+    "${SERVER_DIR}/jre64/bin/java" \
+    "${SERVER_DIR}/jre/bin/java" \
+    "${SERVER_DIR}/java/bin/java"; do
+    if [[ -x "$java_candidate" ]]; then
+        PZ_JAVA_BIN="$java_candidate"
+        break
+    fi
+done
+
+PZ_WRAPPER_BIN="/tmp/pz-bin"
+mkdir -p "$PZ_WRAPPER_BIN"
+if [[ -n "$PZ_JAVA_BIN" ]]; then
+    cat > "${PZ_WRAPPER_BIN}/java" <<EOF
+#!/bin/sh
+exec box64 "$PZ_JAVA_BIN" "\$@"
+EOF
+    chmod +x "${PZ_WRAPPER_BIN}/java"
+else
+    log "WARNING: Project Zomboid bundled Java not found"
+fi
+
 export BOX64_DYNAREC_BIGBLOCK=${BOX64_DYNAREC_BIGBLOCK:-1}
 export BOX64_DYNAREC_BLEEDING_EDGE=${BOX64_DYNAREC_BLEEDING_EDGE:-0}
 export BOX64_DYNAREC_BB_LOOP=${BOX64_DYNAREC_BB_LOOP:-1}
 export BOX64_DYNAREC_FORWARD=${BOX64_DYNAREC_FORWARD:-1}
 export BOX64_DYNAREC_STRONGMEM=${BOX64_DYNAREC_STRONGMEM:-1}
 export BOX64_PATH="${PZ_JAVA_PATH}:/usr/local/bin:/usr/bin:/bin"
-export PATH="${PZ_JAVA_PATH}:${PATH}"
+export PATH="${PZ_WRAPPER_BIN}:${PATH}"
 PZ_LIBRARY_PATH="${SERVER_DIR}:${SERVER_DIR}/linux64:${SERVER_DIR}/natives:${SERVER_DIR}/jre64/lib:${SERVER_DIR}/jre64/lib/server:${SERVER_DIR}/jre/lib:${SERVER_DIR}/jre/lib/server"
 export BOX64_LD_LIBRARY_PATH="${PZ_LIBRARY_PATH}:${BOX64_LD_LIBRARY_PATH:-/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/local/lib}"
 export LD_LIBRARY_PATH="${PZ_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
@@ -122,7 +145,8 @@ if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
 
     # Background + wait preserves SIGTERM trap (unlike exec)
     # shellcheck disable=SC2086
-    box64 java -Xmx"${XMX_VAL}" -Xms"${XMS_VAL}" \
+    JAVA_CMD="${PZ_JAVA_BIN:-java}"
+    box64 "$JAVA_CMD" -Xmx"${XMX_VAL}" -Xms"${XMS_VAL}" \
         -Dzomboid.steam=1 \
         -Dzomboid.znetlog=1 \
         ${JAVA_EXTRA_ARGS:+$JAVA_EXTRA_ARGS} \
