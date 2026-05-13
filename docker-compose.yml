@@ -35,6 +35,9 @@ services:
 
       # ===== [Mod] PanelBridge =====
       - PANEL_BRIDGE_ENABLED=${PANEL_BRIDGE_ENABLED:-false}
+      - PANEL_BRIDGE_VERSION=${PANEL_BRIDGE_VERSION:-v1.0.26}
+      - PANEL_BRIDGE_SOURCE_URL=${PANEL_BRIDGE_SOURCE_URL:-}
+      - PANEL_BRIDGE_SHA256=${PANEL_BRIDGE_SHA256:-}
 
       # ===== [ARM] Extras =====
       - BRANCH=${BRANCH:-}
@@ -55,7 +58,7 @@ services:
       - "16261:16261/udp"
       - "16262:16262/udp"
       # RCON
-      - "${RCON_PORT:-27015}:${RCON_PORT:-27015}/tcp"
+      - "${RCON_BIND:-127.0.0.1}:${RCON_PORT:-27015}:${RCON_PORT:-27015}/tcp"
     volumes:
       # Server saves, mods, logs
       - pz-data:/project-zomboid
@@ -65,10 +68,33 @@ services:
       - pz-steamapps:/steamapps
     stop_grace_period: 90s
 
+  zomboid-panel:
+    profiles: ["zomboid-panel"]
+    build:
+      context: ${PANEL_SOURCE_URL:-https://github.com/fpsacha/zomboid-control-panel.git#v1.0.26}
+    container_name: zomboid-panel
+    restart: unless-stopped
+    depends_on:
+      - pz-arm64
+    ports:
+      - "${PANEL_BIND:-127.0.0.1}:${PANEL_PORT:-3001}:3001/tcp"
+    volumes:
+      - panel-data:/app/data
+      - panel-logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # RCON is reachable inside the Compose network as pz-arm64:${RCON_PORT:-27015}.
+      # Configure that target in the panel UI during first setup.
+
 volumes:
   pz-data:
     driver: local
   pz-config:
     driver: local
   pz-steamapps:
+    driver: local
+  panel-data:
+    driver: local
+  panel-logs:
     driver: local

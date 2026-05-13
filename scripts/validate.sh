@@ -3,11 +3,13 @@
 # validate.sh — Lightweight local validation for Project Zomboid ARM64 server
 #
 # Performs:
-#   1. bash -n syntax check on all shell scripts
+#   1. bash -n syntax check on all shell scripts/tests
 #   2. Optional shellcheck if installed
 #   3. docker compose config if Docker is available (no build/pull)
 #      — treats Docker Desktop context failures as warnings, not errors
-#   4. Env completeness check:
+#   4. Non-destructive shell tests
+#   5. Line-ending check for files enforced by .gitattributes
+#   6. Env completeness check:
 #      a) Every var in .env.example appears in docker-compose.yml environment
 #      b) Every env-to-ini mapped var exists in .env.example
 #
@@ -36,7 +38,7 @@ echo "============================================"
 
 # --- 1. bash -n on all .sh and .scmd files ---
 echo ""
-echo "--- Step 1/4: bash -n syntax check ---"
+echo "--- Step 1/6: bash -n syntax check ---"
 
 SYNTAX_FAIL=0
 while IFS= read -r -d '' script; do
@@ -48,7 +50,7 @@ while IFS= read -r -d '' script; do
         bash -n "$script" 2>&1 | sed 's/^/         /'
         SYNTAX_FAIL=1
     fi
-done < <(find "$SCRIPT_DIR" -maxdepth 1 -type f \( -name '*.sh' -o -name '*.scmd' \) -print0)
+done < <(find "$SCRIPT_DIR" "$PROJECT_DIR/tests" -maxdepth 1 -type f \( -name '*.sh' -o -name '*.scmd' \) -print0 2>/dev/null)
 
 if [[ $SYNTAX_FAIL -eq 1 ]]; then
     ERRORS=$((ERRORS + 1))
@@ -58,7 +60,7 @@ fi
 
 # --- 2. Optional shellcheck ---
 echo ""
-echo "--- Step 2/4: shellcheck (optional) ---"
+echo "--- Step 2/6: shellcheck (optional) ---"
 
 if command -v shellcheck &>/dev/null; then
     echo "  shellcheck found — running..."
@@ -70,14 +72,15 @@ if command -v shellcheck &>/dev/null; then
             warn_msg "shellcheck: $name (review warnings)"
             shellcheck -s bash "$script" 2>&1 | sed 's/^/         /'
         fi
-    done < <(find "$SCRIPT_DIR" -maxdepth 1 -type f \( -name '*.sh' -o -name '*.scmd' \) -print0)
+    done < <(find "$SCRIPT_DIR" "$PROJECT_DIR/tests" -maxdepth 1 -type f \( -name '*.sh' -o -name '*.scmd' \) -print0 2>/dev/null)
 else
-    echo "  shellcheck not installed — skipping (install with: apt install shellcheck / brew install shellcheck)"
+    echo "  shellcheck not installed — skipping optional lint. Install locally, then run:"
+    echo "    shellcheck -s bash scripts/*.sh scripts/*.scmd tests/*.sh"
 fi
 
 # --- 3. docker compose config (graceful context check) ---
 echo ""
-echo "--- Step 3/4: docker compose config (optional) ---"
+echo "--- Step 3/6: docker compose config (optional) ---"
 
 compose_check() {
     # Try primary check
@@ -111,9 +114,53 @@ else
     echo "  docker not found — skipping compose config check"
 fi
 
-# --- 4. Env completeness check ---
+# --- 4. Non-destructive shell tests ---
 echo ""
-echo "--- Step 4/4: Env completeness check ---"
+echo "--- Step 4/6: non-destructive shell tests ---"
+
+TEST_FAIL=0
+while IFS= read -r -d '' test_script; do
+    name="$(basename "$test_script")"
+    if bash "$test_script"; then
+        pass_msg "test: $name"
+    else
+        fail_msg "test: $name"
+        TEST_FAIL=1
+    fi
+done < <(find "$PROJECT_DIR/tests" -maxdepth 1 -type f -name '*.sh' -print0 2>/dev/null)
+
+if [[ $TEST_FAIL -eq 1 ]]; then
+    ERRORS=$((ERRORS + 1))
+fi
+
+# --- 5. Line-ending check ---
+echo ""
+echo "--- Step 5/6: line-ending check ---"
+
+LINE_ENDING_FAIL=0
+for normalized_file in "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.gitattributes"; do
+    name="$(basename "$normalized_file")"
+    if [[ ! -f "$normalized_file" ]]; then
+        fail_msg "$name missing"
+        LINE_ENDING_FAIL=1
+        continue
+    fi
+
+    if grep -q $'\r' "$normalized_file"; then
+        fail_msg "$name contains CRLF/CR line endings; expected LF only"
+        LINE_ENDING_FAIL=1
+    else
+        pass_msg "$name uses LF-only line endings"
+    fi
+done
+
+if [[ $LINE_ENDING_FAIL -eq 1 ]]; then
+    ERRORS=$((ERRORS + 1))
+fi
+
+# --- 6. Env completeness check ---
+echo ""
+echo "--- Step 6/6: Env completeness check ---"
 
 ENVFILE="$PROJECT_DIR/.env.example"
 COMPOSEFILE="$PROJECT_DIR/docker-compose.yml"
@@ -151,11 +198,13 @@ check_env_in_compose() {
     # Extract all variable names from .env.example (non-comment, non-blank lines)
     local env_vars=()
     while IFS='=' read -r name _; do
-        # Skip comments, blank, and section headers like [Category]
-        [[ -z "$name" || "$name" =~ ^[[:space:]]*# || "$name" =~ ^[[:space:]]*\[ ]] && continue
-        name="${name%%[[:space:]]*}"  # Trim trailing whitespace
-        # Strip possible \r from CRLF line endings
+        # Strip possible \r from CRLF line endings and trim whitespace
         name="${name%%$'\r'}"
+        name="${name#${name%%[![:space:]]*}}"
+        name="${name%${name##*[![:space:]]}}"
+        # Skip comments, blank, and section headers like [Category]
+        [[ -z "$name" || "$name" =~ ^# || "$name" =~ ^\[ ]] && continue
+        name="${name%%[[:space:]]*}"  # Trim trailing inline whitespace
         env_vars+=("$name")
     done < "$ENVFILE"
 

@@ -51,16 +51,40 @@ Priority: `MEMORY_XMX_GB` -> `MEMORY` -> default `2G`.
 |----------|---------|-------------|
 | `PANEL_BRIDGE_ENABLED` | `false` | Download and install PanelBridge mod from GitHub at container start |
 | `PANEL_BRIDGE_VERSION` | `v1.0.26` | PanelBridge release tag on GitHub (semver `vX.Y.Z`) |
+| `PANEL_BRIDGE_SOURCE_URL` | *(derived)* | Advanced override for pinned source archive URL |
+| `PANEL_BRIDGE_SHA256` | *(empty)* | Optional sha256 for source archive verification |
 
 When `PANEL_BRIDGE_ENABLED=true`, the container automatically:
-1. Downloads `mod.info` and `PanelBridge.lua` from the tagged GitHub release
-2. Places them in `/project-zomboid/mods/PanelBridge/`
-3. Forces `DoLuaChecksum=false` in server INI (required by PanelBridge)
-4. Appends `PanelBridge` to `Mods` in server INI
+1. Downloads the pinned source archive from `fpsacha/zomboid-control-panel`
+2. Extracts only `pz-mod/PanelBridge/`
+3. Validates `mod.info` and `media/lua/server/*.lua`
+4. Places files in `/project-zomboid/mods/PanelBridge/`
+5. Forces `DoLuaChecksum=false` in server INI only after install succeeds
+6. Appends `PanelBridge` to `Mods` in server INI
 
 Set `PANEL_BRIDGE_ENABLED=false` to rollback -- next container start cleans PanelBridge from INI automatically.
 
-Connect the control panel: Run the panel separately (another container, another machine). Point it to the server's RCON port (`27015` by default) with the `RCON_PASSWORD`. The panel handles the rest.
+Connect the control panel: run the panel separately or with the optional Compose profile. Point it to RCON (`pz-arm64:27015` inside Compose or `127.0.0.1:27015` from the host default) with `RCON_PASSWORD`.
+
+Security: RCON and panel are admin planes. Defaults prefer localhost/internal access. Public exposure requires your own reverse proxy with HTTPS/auth and is out of scope. Full guide: [control-panel.md](control-panel.md).
+
+---
+
+## [Panel] Optional Zomboid Control Panel profile
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PANEL_BIND` | `127.0.0.1` | Host bind for panel web UI in Compose profile |
+| `PANEL_PORT` | `3001` | Host port for panel web UI |
+| `PANEL_SOURCE_URL` | `https://github.com/fpsacha/zomboid-control-panel.git#v1.0.26` | Compose build context for upstream panel |
+
+Start profile:
+
+```bash
+docker compose --profile zomboid-panel up -d --build
+```
+
+Open `http://127.0.0.1:3001`. Configure panel RCON target as `pz-arm64:${RCON_PORT:-27015}`.
 
 ---
 
@@ -77,6 +101,7 @@ Connect the control panel: Run the panel separately (another container, another 
 | `DEFAULT_PORT` | `16261` | Primary game port |
 | `UDP_PORT` | `16262` | Secondary UDP port |
 | `RCON_PORT` | `27015` | RCON TCP port |
+| `RCON_BIND` | `127.0.0.1` | Docker Compose host bind for RCON; use `0.0.0.0` only for trusted LAN/VPN |
 | `MAX_PLAYERS` | `32` | Max concurrent players |
 | `PING_LIMIT` | `400` | Max ping before kick |
 | `PVP` | `true` | Enable player-vs-player |

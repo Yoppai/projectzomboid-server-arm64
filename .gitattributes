@@ -1,11 +1,19 @@
 * text=auto
 
+# Repository attributes must stay LF to avoid normalization churn.
+.gitattributes text eol=lf
+
 # Runtime scripts must stay LF for Linux containers.
 *.sh text eol=lf
+scripts/*.sh text eol=lf
 *.scmd text eol=lf
+scripts/*.scmd text eol=lf
 
 # Keep Docker/Compose/config files normalized.
 Dockerfile text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 *.md text eol=lf
+docs/*.md text eol=lf
+*.env text eol=lf
+.env.example text eol=lf

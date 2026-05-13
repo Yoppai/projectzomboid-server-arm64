@@ -26,21 +26,20 @@ docker compose stop
 ### With Zomboid Control Panel
 
 ```bash
-# Enable PanelBridge mod in .env
-#   PANEL_BRIDGE_ENABLED=true
-docker compose up -d
-
-# Run panel separately
-docker run -d --name zomboid-panel -p 3001:3001 ghcr.io/fpsacha/zomboid-control-panel:latest
-# Settings -> RCON: <server-ip>:27015
+# Optional panel profile; default server startup remains unchanged.
+docker compose --profile zomboid-panel up -d --build
+# Open http://127.0.0.1:3001
+# Panel RCON target inside Compose: pz-arm64:27015
 ```
+
+Panel and PanelBridge are opt-in. See **[docs/control-panel.md](docs/control-panel.md)** for external install, security warnings, `PanelBridge`, validation, and rollback.
 
 ### Docker Run
 
 ```bash
 docker run -d --name pz-server --platform linux/arm64 \
   -e MEMORY_XMX_GB=8 -e PASSWORD=CHANGEME -e RCON_PASSWORD=changeme \
-  -p 8766:8766/udp -p 8767:8767/udp -p 16261:16261/udp -p 16262:16262/udp -p 27015:27015/tcp \
+  -p 8766:8766/udp -p 8767:8767/udp -p 16261:16261/udp -p 16262:16262/udp -p 127.0.0.1:27015:27015/tcp \
   -v pz-data:/project-zomboid -v pz-config:/project-zomboid-config \
   pz-arm64
 ```
@@ -69,6 +68,8 @@ Full reference: **[docs/env-variables.md](docs/env-variables.md)**
 |----------|---------|-------------|
 | `PANEL_BRIDGE_ENABLED` | `false` | Auto-install PanelBridge mod from GitHub |
 | `PANEL_BRIDGE_VERSION` | `v1.0.26` | Release tag (semver) |
+
+PanelBridge is only for optional control panel features. When enabled and installed, it sets `DoLuaChecksum=false`; understand the trust tradeoff before use.
 
 ### Key Server Settings
 
@@ -99,7 +100,7 @@ Full reference: **[docs/env-variables.md](docs/env-variables.md)**
 | 8767 | UDP | Game traffic |
 | 16261 | UDP | Steam query (`DEFAULT_PORT`) |
 | 16262 | UDP | Secondary (`UDP_PORT`) |
-| 27015 | TCP | RCON (configurable) |
+| 27015 | TCP | RCON (configurable; Compose binds localhost by default) |
 
 ## Graceful Shutdown
 
@@ -110,6 +111,7 @@ SIGTERM sequence: RCON save -> RCON quit -> wait 30s -> SIGTERM -> wait 5s -> SI
 | Doc | Content |
 |-----|---------|
 | [docs/env-variables.md](docs/env-variables.md) | Full env var reference + INI mapping |
+| [docs/control-panel.md](docs/control-panel.md) | Optional Zomboid Control Panel + PanelBridge setup |
 | [docs/configuration.md](docs/configuration.md) | Config generation, Box64 tuning, Java fallback |
 | [docs/deployment.md](docs/deployment.md) | GHCR, CI/CD, build/runtime validation |
 | [docs/hardware.md](docs/hardware.md) | ARM device recommendations, limitations |
