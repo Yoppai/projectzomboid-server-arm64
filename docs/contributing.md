@@ -42,14 +42,17 @@ Normal deployments should use `BRANCH=unstable` in `.env` and restart the contai
 
 ```bash
 ./scripts/validate.sh        # Full suite
-bash -n scripts/*.sh scripts/*.scmd  # Syntax only
+bash -n scripts/*.sh scripts/*.scmd tests/*.sh  # Syntax only
+bash tests/panelbridge.sh    # Non-destructive PanelBridge helper tests
 ```
+
+`tests/panelbridge.sh` uses temporary directories and a local mocked GitHub source archive. It does not start Project Zomboid and does not use network downloads.
 
 ### Build validation
 
 ```bash
 # Shellcheck all scripts
-shellcheck scripts/*.sh scripts/*.scmd
+shellcheck -s bash scripts/*.sh scripts/*.scmd tests/*.sh
 
 # Verify Dockerfile syntax + build
 docker buildx build --platform linux/arm64 -t pz-arm64 .
