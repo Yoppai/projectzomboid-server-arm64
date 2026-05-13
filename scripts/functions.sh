@@ -25,9 +25,17 @@ rcon_send() {
 # Patch ProjectZomboid64.json with memory settings
 # Usage: patch_memory_json [xmx_val] [xms_val]
 patch_memory_json() {
-    local json_path="/project-zomboid-config/ProjectZomboid64.json"
+    local server_json_path="/project-zomboid/ProjectZomboid64.json"
+    local config_json_path="/project-zomboid-config/ProjectZomboid64.json"
+    local json_path="$server_json_path"
     local xmx="${1:-${MEMORY:-2G}}"
     local xms="${2:-$xmx}"
+
+    # ProjectZomboid64 reads the JSON beside the launcher binary, not the
+    # config volume copy. Fall back to the config volume only before install.
+    if [[ ! -f "$json_path" ]]; then
+        json_path="$config_json_path"
+    fi
 
     if [[ ! -f "$json_path" ]]; then
         log "WARNING: ${json_path} not found — creating default"
@@ -44,11 +52,41 @@ EOF
     fi
 
     if command -v jq &>/dev/null; then
-        jq --arg xmx "${xmx}" --arg xms "${xms}" \
-           '.vmArgs = "-Xmx" + $xmx + " -Xms" + $xms | .initialHeap = $xms | .maxHeap = $xmx' \
-           "$json_path" > "${json_path}.tmp" && \
+        jq --arg xmx "${xmx}" --arg xms "${xms}" '
+            def patch_vmargs:
+                if (.vmArgs | type) == "array" then
+                    .vmArgs |= (
+                        map(select(. != "-XX:+UseZGC")) |
+                        map(
+                            if test("^-Xmx") then "-Xmx" + $xmx
+                            elif test("^-Xms") then "-Xms" + $xms
+                            else . end
+                        ) |
+                        (if any(test("^-Xmx")) then . else . + ["-Xmx" + $xmx] end) |
+                        (if any(test("^-Xms")) then . else . + ["-Xms" + $xms] end)
+                    )
+                elif (.vmArgs | type) == "string" then
+                    .vmArgs |= (
+                        gsub("-XX:\\+UseZGC"; "") |
+                        if test("-Xmx[0-9]+[kKmMgGtT]") then
+                            gsub("-Xmx[0-9]+[kKmMgGtT]"; "-Xmx" + $xmx)
+                        else
+                            . + " -Xmx" + $xmx
+                        end |
+                        if test("-Xms[0-9]+[kKmMgGtT]") then
+                            gsub("-Xms[0-9]+[kKmMgGtT]"; "-Xms" + $xms)
+                        else
+                            . + " -Xms" + $xms
+                        end
+                    )
+                else
+                    .vmArgs = ["-Xmx" + $xmx, "-Xms" + $xms]
+                end;
+            patch_vmargs | .initialHeap = $xms | .maxHeap = $xmx
+        ' \
+            "$json_path" > "${json_path}.tmp" && \
         mv "${json_path}.tmp" "$json_path"
-        log "Patched memory config via jq: -Xmx${xmx} -Xms${xms}"
+        log "Patched memory config via jq (${json_path}): -Xmx${xmx} -Xms${xms}; removed -XX:+UseZGC for Box64"
     else
         log "WARNING: jq not available, using sed fallback"
         sed -i "s/-Xmx[0-9]*[kKmMgGtT]/-Xmx${xmx}/g; s/-Xms[0-9]*[kKmMgGtT]/-Xms${xms}/g" "$json_path" 2>/dev/null || \
