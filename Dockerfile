@@ -59,6 +59,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
+# sonroyaalmerol/steamcmd-arm64 stores SteamCMD under /home/steam/steamcmd.
+# Keep the Debian-style path expected by older scripts and docs.
+RUN set -eux; \
+    if ! command -v steamcmd >/dev/null 2>&1 && [ ! -e /usr/games/steamcmd ]; then \
+        found="$(find /home/steam /opt /root -name steamcmd.sh 2>/dev/null | head -n 1)"; \
+        test -n "$found"; \
+        mkdir -p /usr/games; \
+        ln -sf "$found" /usr/games/steamcmd; \
+    fi
+
 # --- Copy cross-compiled RCON binary ---
 COPY --from=rcon-builder /bin/rcon /usr/local/bin/rcon
 

@@ -14,21 +14,49 @@ log "=== SteamCMD Install/Update ==="
 # Branch: BRANCH primary, SERVER_BRANCH backwards-compat alias
 BRANCH="${BRANCH:-${SERVER_BRANCH:-}}"
 
-# Build SteamCMD command with guaranteed install path
-STEAMCMD_BIN=$(command -v steamcmd || echo "/usr/games/steamcmd")
-STEAMCMD_CMD="${STEAMCMD_BIN} +login anonymous +force_install_dir /project-zomboid +app_update 380870"
+# Resolve SteamCMD. Debian packages expose /usr/games/steamcmd, while
+# sonroyaalmerol/steamcmd-arm64 exposes /home/steam/steamcmd/steamcmd.sh.
+resolve_steamcmd() {
+    local candidate
+
+    if command -v steamcmd >/dev/null 2>&1; then
+        command -v steamcmd
+        return 0
+    fi
+
+    for candidate in \
+        /usr/games/steamcmd \
+        /usr/bin/steamcmd \
+        /home/steam/steamcmd/steamcmd.sh \
+        /opt/steamcmd/steamcmd.sh \
+        /root/steamcmd/steamcmd.sh; do
+        if [[ -x "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+if ! STEAMCMD_BIN="$(resolve_steamcmd)"; then
+    log "ERROR: SteamCMD not found. Checked PATH, /usr/games, /usr/bin, /home/steam, /opt, /root."
+    exit 127
+fi
+
+STEAMCMD_ARGS=(+login anonymous +force_install_dir /project-zomboid +app_update 380870)
 
 if [[ -n "$BRANCH" ]]; then
-    STEAMCMD_CMD="${STEAMCMD_CMD} -beta ${BRANCH}"
+    STEAMCMD_ARGS+=(-beta "${BRANCH}")
     log "Using branch: ${BRANCH}"
 else
     log "Using stable (no branch)"
 fi
 
-STEAMCMD_CMD="${STEAMCMD_CMD} +quit"
+STEAMCMD_ARGS+=(+quit)
 
-log "Running: ${STEAMCMD_CMD}"
-eval "${STEAMCMD_CMD}"
+log "Running: ${STEAMCMD_BIN} ${STEAMCMD_ARGS[*]}"
+"${STEAMCMD_BIN}" "${STEAMCMD_ARGS[@]}"
 STEAMCMD_EXIT=$?
 
 if [[ $STEAMCMD_EXIT -ne 0 ]]; then
