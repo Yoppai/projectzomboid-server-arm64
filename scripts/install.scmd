@@ -59,7 +59,8 @@ if ! STEAMCMD_BIN="$(resolve_steamcmd)"; then
     exit 127
 fi
 
-STEAMCMD_ARGS=(+login anonymous +force_install_dir /project-zomboid +app_update 380870)
+# SteamCMD requires force_install_dir before login.
+STEAMCMD_ARGS=(+force_install_dir /project-zomboid +login anonymous +app_update 380870 validate)
 
 if [[ -n "$BRANCH" ]]; then
     STEAMCMD_ARGS+=(-beta "${BRANCH}")
@@ -79,7 +80,16 @@ if [[ $STEAMCMD_EXIT -ne 0 ]]; then
     exit $STEAMCMD_EXIT
 fi
 
-# Create symlink from Steam default path to /project-zomboid
+# Verify force_install_dir produced the server launcher. SteamCMD can return 0
+# even when app_update prints an ERROR, so fail explicitly before launcher loop.
+if [[ -f /project-zomboid/ProjectZomboid64 ]]; then
+    log "Verified server install at /project-zomboid/ProjectZomboid64"
+    log "Install/update complete"
+    exit 0
+fi
+
+# Create symlink from Steam default path to /project-zomboid if SteamCMD ignored
+# force_install_dir and installed into its default library.
 STEAM_PZ_DIR="${STEAM_PZ_DIR:-/home/steam/Steam/steamapps/common/ProjectZomboid}"
 
 if [[ -d "$STEAM_PZ_DIR" ]]; then
@@ -92,6 +102,11 @@ if [[ -d "$STEAM_PZ_DIR" ]]; then
 else
     log "WARNING: Server directory not found at ${STEAM_PZ_DIR}"
     log "SteamCMD may have used a different path; check container"
+fi
+
+if [[ ! -f /project-zomboid/ProjectZomboid64 ]]; then
+    log "ERROR: ProjectZomboid64 missing after SteamCMD install/update"
+    exit 1
 fi
 
 log "Install/update complete"
