@@ -157,7 +157,7 @@ if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
         -Dzomboid.znetlog=1 \
         ${JAVA_EXTRA_ARGS:+$JAVA_EXTRA_ARGS} \
         -cp "${SERVER_DIR}/java/*:${SERVER_DIR}/ProjectZomboid64.jar" \
-        zombie.network.Server \
+        zombie.network.GameServer \
         -cachedir /project-zomboid-config \
         -adminusername "${ADMIN_USERNAME:-admin}" \
         -adminpassword "${ADMIN_PASSWORD:-admin}" \
