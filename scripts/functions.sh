@@ -153,8 +153,9 @@ wait_for_rcon_port() {
 # -------------------------------------------------------------------
 install_panelbridge() {
     export PANEL_BRIDGE_INSTALLED=false
+    local panel_bridge_enabled="${PANEL_BRIDGE_ENABLED:-}"
 
-    if [[ "${PANEL_BRIDGE_ENABLED,,}" != "true" ]]; then
+    if [[ "${panel_bridge_enabled,,}" != "true" ]]; then
         log "PanelBridge disabled — skipping download/install"
         return 0
     fi
@@ -393,7 +394,7 @@ env_to_ini_anticheat_map() {
     done
     # Threshold multipliers: 2,3,4,9,15,20,22,24
     for type_num in 2 3 4 9 15 20 22 24; do
-        echo "AntiCheatProtectionType${type_num}Threshold=ANTI_CHEAT_PROTECTION_TYPE${type_num}_THRESHOLD_MULTIPLIER"
+        echo "AntiCheatProtectionType${type_num}ThresholdMultiplier=ANTI_CHEAT_PROTECTION_TYPE${type_num}_THRESHOLD_MULTIPLIER"
     done
 }
 
@@ -446,24 +447,36 @@ INI
     tmp_ini="$(mktemp)"
     cp "$ini_path" "$tmp_ini"
 
-    # Helper: set a key=value in the temp ini (update or append)
+    # Helper: set a key=value in the temp ini (update or append).
+    # Use awk instead of sed replacement so values cannot inject newlines or
+    # concatenate adjacent keys (e.g. "6.0AdminUsername").
     _ini_set_key() {
         local key="$1"
         local val="$2"
-        # Escape sed special chars in val: /, \, &
-        local val_escaped
-        val_escaped=$(printf '%s\n' "$val" | sed 's/[\/&]/\\&/g; s/$/\\n/' | tr -d '\n')
-        if grep -qi "^${key}=" "$tmp_ini" 2>/dev/null; then
-            sed -i "s|^${key}=.*|${key}=${val_escaped}|I" "$tmp_ini"
-        else
-            echo "${key}=${val}" >> "$tmp_ini"
-        fi
+        local next_tmp
+        next_tmp="$(mktemp)"
+        awk -v key="$key" -v val="$val" '
+            BEGIN { found = 0; key_lc = tolower(key) }
+            {
+                split($0, parts, "=")
+                if (tolower(parts[1]) == key_lc) {
+                    if (!found) print key "=" val
+                    found = 1
+                } else {
+                    print $0
+                }
+            }
+            END { if (!found) print key "=" val }
+        ' "$tmp_ini" > "$next_tmp"
+        mv "$next_tmp" "$tmp_ini"
     }
 
     # 1) Process explicit env_to_ini_map entries
     while IFS='=' read -r ini_key env_name; do
         # Skip comment lines and blank lines
-        [[ -z "$ini_key" || "$ini_key" == \#* ]] && continue
+        if [[ -z "$ini_key" || "$ini_key" == \#* ]]; then
+            continue
+        fi
         # Safe indirect expansion: read env var value if set
         local val
         val="${!env_name-}"
@@ -473,12 +486,18 @@ INI
                 SERVER_PUBLIC) val="${PUBLIC-}" ;;
             esac
         fi
+        # Empty env means "leave existing server-generated value alone".
+        if [[ -z "$val" ]]; then
+            continue
+        fi
         _ini_set_key "$ini_key" "$val"
     done < <(env_to_ini_map)
 
     local panelbridge_active=false
     local project_zomboid_dir="${PROJECT_ZOMBOID_DIR:-/project-zomboid}"
-    if [[ "${PANEL_BRIDGE_ENABLED,,}" == "true" && "${PANEL_BRIDGE_INSTALLED,,}" == "true" && -f "${project_zomboid_dir}/mods/PanelBridge/mod.info" ]]; then
+    local panel_bridge_enabled="${PANEL_BRIDGE_ENABLED:-}"
+    local panel_bridge_installed="${PANEL_BRIDGE_INSTALLED:-}"
+    if [[ "${panel_bridge_enabled,,}" == "true" && "${panel_bridge_installed,,}" == "true" && -f "${project_zomboid_dir}/mods/PanelBridge/mod.info" ]]; then
         panelbridge_active=true
     fi
 
@@ -494,6 +513,10 @@ INI
         if [[ -z "$val" && "$env_name" == *_THRESHOLD_MULTIPLIER ]]; then
             local alias_name="${env_name%_THRESHOLD_MULTIPLIER}_THRESHOLD"
             val="${!alias_name-}"
+        fi
+        # Empty env means "leave existing server-generated value alone".
+        if [[ -z "$val" ]]; then
+            continue
         fi
         _ini_set_key "$ini_key" "$val"
     done < <(env_to_ini_anticheat_map)
@@ -515,7 +538,7 @@ INI
         # If user set MODS, their value is authoritative (already validated no PanelBridge)
         if [[ -z "$mods_val" ]]; then
             local current_mods
-            current_mods=$(grep -i '^Mods=' "$tmp_ini" 2>/dev/null | head -1 | cut -d= -f2-)
+            current_mods=$(grep -i '^Mods=' "$tmp_ini" 2>/dev/null | head -1 | cut -d= -f2- || true)
             if [[ -n "$current_mods" ]]; then
                 # Remove PanelBridge from semicolon-separated list
                 local cleaned=""

@@ -41,6 +41,7 @@ services:
 
       # ===== [ARM] Extras =====
       - BRANCH=${BRANCH:-}
+      - SERVER_BRANCH=${SERVER_BRANCH:-}
       - UPDATE_ON_START=${UPDATE_ON_START:-true}
       - BACKUPS_ON_START=${BACKUPS_ON_START:-true}
 

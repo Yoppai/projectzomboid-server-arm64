@@ -177,7 +177,39 @@ INI
     rm -rf "$tmp"
 }
 
+test_patch_server_ini_skips_empty_env_and_keeps_generated_values() {
+    local tmp config_dir ini
+    tmp="$(mktemp -d)"
+    config_dir="$tmp/project-zomboid-config"
+    ini="$config_dir/Server/pzserver.ini"
+    mkdir -p "$config_dir/Server"
+    cat > "$ini" <<'INI'
+PVP=true
+DefaultPort=16261
+AntiCheatProtectionType24ThresholdMultiplier=6.0
+AdminUsername=oldadmin
+INI
+
+    SERVER_NAME=pzserver \
+    CONFIG_DIR="$config_dir" \
+    GENERATE_SETTINGS=true \
+    PVP= \
+    DEFAULT_PORT= \
+    ANTI_CHEAT_PROTECTION_TYPE24_THRESHOLD_MULTIPLIER= \
+    ADMIN_USERNAME=admin \
+    patch_server_ini
+
+    assert_contains "$ini" "PVP=true"
+    assert_contains "$ini" "DefaultPort=16261"
+    assert_contains "$ini" "AntiCheatProtectionType24ThresholdMultiplier=6.0"
+    assert_contains "$ini" "AdminUsername=admin"
+    assert_not_contains "$ini" "6.0AdminUsername"
+    assert_line_count 1 '^AdminUsername=admin$' "$ini"
+    rm -rf "$tmp"
+}
+
 test_install_panelbridge_places_files
 test_patch_server_ini_disabled_rollback_is_idempotent
+test_patch_server_ini_skips_empty_env_and_keeps_generated_values
 
 echo "[PASS] PanelBridge install and INI patch tests"

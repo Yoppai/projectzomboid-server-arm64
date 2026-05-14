@@ -170,11 +170,11 @@ The `env_to_ini_map()` function in `functions.sh` defines the mapping between en
 | `DEFAULT_PORT` | `DefaultPort` |
 | `SERVER_PUBLIC` | `Public` |
 | `ANTI_CHEAT_PROTECTION_TYPE2` | `AntiCheatProtectionType2` |
-| `ANTI_CHEAT_PROTECTION_TYPE2_THRESHOLD_MULTIPLIER` | `AntiCheatProtectionType2Threshold` |
+| `ANTI_CHEAT_PROTECTION_TYPE2_THRESHOLD_MULTIPLIER` | `AntiCheatProtectionType2ThresholdMultiplier` |
 | `CONSTRUCTION_PREVENTS_LOOT_RESPAWN` | `ConstructionPreventsLootRespawn` |
 | `DROP_OFF_WHITE_LIST_AFTER_DEATH` | `DropOffWhiteListAfterDeath` |
 | `BACKUPS_ON_START` | `BackupsOnStart` |
 | `BACKUPS_ON_VERSION_CHANGE` | `BackupsOnVersionChange` |
 | *90+ total mappings* | |
 
-Anti-cheat vars follow a pattern: `ANTI_CHEAT_PROTECTION_TYPE{N}` -> `AntiCheatProtectionType{N}`, with `_THRESHOLD_MULTIPLIER` suffix -> `Threshold` (PascalCase). The `_THRESHOLD` suffix is accepted as an alias for `_THRESHOLD_MULTIPLIER` -- both through compose env and direct script fallback.
+Anti-cheat vars follow a pattern: `ANTI_CHEAT_PROTECTION_TYPE{N}` -> `AntiCheatProtectionType{N}`, with `_THRESHOLD_MULTIPLIER` suffix -> `ThresholdMultiplier` (PascalCase). The `_THRESHOLD` suffix is accepted as an alias for `_THRESHOLD_MULTIPLIER` -- both through compose env and direct script fallback.

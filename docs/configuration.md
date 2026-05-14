@@ -12,7 +12,7 @@ The server configuration lives in `Server/<SERVER_NAME>.ini` inside the config v
 
 The `env_to_ini_map()` function in `functions.sh` defines the mapping. See [env-variables.md#env-to-ini-mapping](env-variables.md#env-to-ini-mapping) for the full mapping table.
 
-Anti-cheat vars follow a pattern: `ANTI_CHEAT_PROTECTION_TYPE{N}` -> `AntiCheatProtectionType{N}`, with `_THRESHOLD_MULTIPLIER` suffix -> `Threshold` (PascalCase). The `_THRESHOLD` suffix is accepted as an alias for `_THRESHOLD_MULTIPLIER` -- both through compose env and direct script fallback.
+Anti-cheat vars follow a pattern: `ANTI_CHEAT_PROTECTION_TYPE{N}` -> `AntiCheatProtectionType{N}`, with `_THRESHOLD_MULTIPLIER` suffix -> `ThresholdMultiplier` (PascalCase). The `_THRESHOLD` suffix is accepted as an alias for `_THRESHOLD_MULTIPLIER` -- both through compose env and direct script fallback.
 
 ---
 
