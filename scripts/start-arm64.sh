@@ -178,6 +178,7 @@ if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
         -cp "${SERVER_DIR}/java/.:${SERVER_DIR}/java/*:${SERVER_DIR}/ProjectZomboid64.jar" \
         zombie.network.GameServer \
         -cachedir=/project-zomboid-config \
+        -servername "${SERVER_NAME:-pzserver}" \
         -adminusername "${ADMIN_USERNAME:-admin}" \
         -adminpassword "${ADMIN_PASSWORD:-admin}" \
         -port 16261 &
