@@ -152,9 +152,19 @@ if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
     # Background + wait preserves SIGTERM trap (unlike exec)
     # shellcheck disable=SC2086
     JAVA_CMD="${PZ_JAVA_BIN:-java}"
-    box64 "$JAVA_CMD" -Xmx"${XMX_VAL}" -Xms"${XMS_VAL}" \
+    box64 "$JAVA_CMD" \
+        -Djava.awt.headless=true \
+        -Xmx"${XMX_VAL}" -Xms"${XMS_VAL}" \
         -Dzomboid.steam=1 \
         -Dzomboid.znetlog=1 \
+        -Djava.library.path=linux64/:natives/ \
+        -Djava.security.egd=file:/dev/urandom \
+        -XX:-OmitStackTraceInFastThrow \
+        -XX:+UseSerialGC \
+        -XX:-TieredCompilation \
+        -XX:CICompilerCount=1 \
+        -XX:-UseCompressedOops \
+        -XX:-UseCompressedClassPointers \
         ${JAVA_EXTRA_ARGS:+$JAVA_EXTRA_ARGS} \
         -cp "${SERVER_DIR}/java/.:${SERVER_DIR}/java/*:${SERVER_DIR}/ProjectZomboid64.jar" \
         zombie.network.GameServer \
