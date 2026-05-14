@@ -88,7 +88,8 @@ RUN set -eux; \
             build-essential \
             ca-certificates \
             cmake \
-            git; \
+            git \
+            python3; \
         git clone --depth 1 --branch "${BOX64_VERSION}" https://github.com/ptitSeb/box64.git /tmp/box64; \
         cmake -S /tmp/box64 -B /tmp/box64/build \
             -DRPI4ARM64=1 \
@@ -97,7 +98,7 @@ RUN set -eux; \
         cmake --install /tmp/box64/build; \
         box64 --version; \
         rm -rf /tmp/box64; \
-        apt-get purge -y --auto-remove build-essential cmake git; \
+        apt-get purge -y --auto-remove build-essential cmake git python3; \
         rm -rf /var/lib/apt/lists/*; \
     else \
         box64 --version || true; \
