@@ -52,41 +52,61 @@ EOF
     fi
 
     if command -v jq &>/dev/null; then
-        jq --arg xmx "${xmx}" --arg xms "${xms}" '
+        jq --arg xmx "${xmx}" --arg xms "${xms}" --arg safe_java "${BOX64_SAFE_JAVA:-true}" '
+            def safe_java_enabled:
+                ($safe_java | ascii_downcase) != "false";
+            def safe_java_args:
+                if safe_java_enabled then
+                    [
+                        "-XX:+UseSerialGC",
+                        "-XX:-TieredCompilation",
+                        "-XX:CICompilerCount=1",
+                        "-XX:-UseCompressedOops",
+                        "-XX:-UseCompressedClassPointers"
+                    ]
+                else
+                    []
+                end;
+            def blocked_vmarg($arg):
+                ([
+                    "-XX:+UseZGC",
+                    "-XX:+UseG1GC",
+                    "-XX:+UseParallelGC",
+                    "-XX:+UseShenandoahGC",
+                    "-XX:+UseConcMarkSweepGC",
+                    "-XX:+UseSerialGC",
+                    "-XX:-TieredCompilation",
+                    "-XX:+TieredCompilation",
+                    "-XX:-UseCompressedOops",
+                    "-XX:+UseCompressedOops",
+                    "-XX:-UseCompressedClassPointers",
+                    "-XX:+UseCompressedClassPointers"
+                ] | index($arg)) != null
+                or ($arg | test("^-XX:CICompilerCount="));
+            def patch_vmarg_array:
+                map(select(. != "")) |
+                map(select(blocked_vmarg(.) | not)) |
+                map(
+                    if test("^-Xmx") then "-Xmx" + $xmx
+                    elif test("^-Xms") then "-Xms" + $xms
+                    else . end
+                ) |
+                (if any(test("^-Xmx")) then . else . + ["-Xmx" + $xmx] end) |
+                (if any(test("^-Xms")) then . else . + ["-Xms" + $xms] end) |
+                . + safe_java_args;
             def patch_vmargs:
                 if (.vmArgs | type) == "array" then
-                    .vmArgs |= (
-                        map(select(. != "-XX:+UseZGC")) |
-                        map(
-                            if test("^-Xmx") then "-Xmx" + $xmx
-                            elif test("^-Xms") then "-Xms" + $xms
-                            else . end
-                        ) |
-                        (if any(test("^-Xmx")) then . else . + ["-Xmx" + $xmx] end) |
-                        (if any(test("^-Xms")) then . else . + ["-Xms" + $xms] end)
-                    )
+                    .vmArgs |= patch_vmarg_array
                 elif (.vmArgs | type) == "string" then
-                    .vmArgs |= (
-                        gsub("-XX:\\+UseZGC"; "") |
-                        if test("-Xmx[0-9]+[kKmMgGtT]") then
-                            gsub("-Xmx[0-9]+[kKmMgGtT]"; "-Xmx" + $xmx)
-                        else
-                            . + " -Xmx" + $xmx
-                        end |
-                        if test("-Xms[0-9]+[kKmMgGtT]") then
-                            gsub("-Xms[0-9]+[kKmMgGtT]"; "-Xms" + $xms)
-                        else
-                            . + " -Xms" + $xms
-                        end
-                    )
+                    .vmArgs |= (split(" ") | patch_vmarg_array | join(" "))
                 else
-                    .vmArgs = ["-Xmx" + $xmx, "-Xms" + $xms]
+                    .vmArgs = (["-Xmx" + $xmx, "-Xms" + $xms] + safe_java_args)
                 end;
             patch_vmargs | .initialHeap = $xms | .maxHeap = $xmx
         ' \
             "$json_path" > "${json_path}.tmp" && \
         mv "${json_path}.tmp" "$json_path"
-        log "Patched memory config via jq (${json_path}): -Xmx${xmx} -Xms${xms}; removed -XX:+UseZGC for Box64"
+        log "Patched memory config via jq (${json_path}): -Xmx${xmx} -Xms${xms}; applied Box64-safe JVM args"
     else
         log "WARNING: jq not available, using sed fallback"
         sed -i "s/-Xmx[0-9]*[kKmMgGtT]/-Xmx${xmx}/g; s/-Xms[0-9]*[kKmMgGtT]/-Xms${xms}/g" "$json_path" 2>/dev/null || \
