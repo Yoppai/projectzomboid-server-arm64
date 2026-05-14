@@ -148,6 +148,15 @@ cd "$SERVER_DIR"
 if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
     log "=== Java Fallback Mode ==="
     log "Launching Java directly (bypasses launcher)"
+    if [[ -f "linux64/steamclient.so" && ! -e "linux64/libsteam.so" ]]; then
+        log "Creating Steam compatibility symlink: linux64/libsteam.so -> steamclient.so"
+        ln -s steamclient.so linux64/libsteam.so || true
+    fi
+
+    ZOMBOID_STEAM_RUNTIME=1
+    if [[ "${DISABLE_STEAM,,}" == "true" ]]; then
+        ZOMBOID_STEAM_RUNTIME=0
+    fi
 
     # Background + wait preserves SIGTERM trap (unlike exec)
     # shellcheck disable=SC2086
@@ -155,7 +164,7 @@ if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
     box64 "$JAVA_CMD" \
         -Djava.awt.headless=true \
         -Xmx"${XMX_VAL}" -Xms"${XMS_VAL}" \
-        -Dzomboid.steam=1 \
+        -Dzomboid.steam="${ZOMBOID_STEAM_RUNTIME}" \
         -Dzomboid.znetlog=1 \
         -Djava.library.path=linux64/:natives/ \
         -Djava.security.egd=file:/dev/urandom \
@@ -168,7 +177,7 @@ if [[ "${USE_JAVA_FALLBACK,,}" == "true" ]]; then
         ${JAVA_EXTRA_ARGS:+$JAVA_EXTRA_ARGS} \
         -cp "${SERVER_DIR}/java/.:${SERVER_DIR}/java/*:${SERVER_DIR}/ProjectZomboid64.jar" \
         zombie.network.GameServer \
-        -cachedir /project-zomboid-config \
+        -cachedir=/project-zomboid-config \
         -adminusername "${ADMIN_USERNAME:-admin}" \
         -adminpassword "${ADMIN_PASSWORD:-admin}" \
         -port 16261 &

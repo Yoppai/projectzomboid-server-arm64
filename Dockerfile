@@ -45,6 +45,7 @@ ARG BRANCH=""
 ARG RCON_PORT=27015
 ARG UPDATE_ON_START=true
 ARG USE_JAVA_FALLBACK=false
+ARG BOX64_VERSION=v0.2.4
 ARG BOX64_DYNAREC_BIGBLOCK=0
 ARG BOX64_DYNAREC_BLEEDING_EDGE=0
 
@@ -77,6 +78,29 @@ RUN set -eux; \
         steamdir="$(dirname "$found")"; \
         printf '#!/bin/sh\ncd "%s"\nexec ./steamcmd.sh "$@"\n' "$steamdir" > /usr/games/steamcmd; \
         chmod +x /usr/games/steamcmd; \
+    fi
+
+# Optionally rebuild Box64 from a pinned source version. Empty BOX64_VERSION keeps base image Box64.
+RUN set -eux; \
+    if [ -n "${BOX64_VERSION}" ]; then \
+        apt-get update; \
+        apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            cmake \
+            git; \
+        git clone --depth 1 --branch "${BOX64_VERSION}" https://github.com/ptitSeb/box64.git /tmp/box64; \
+        cmake -S /tmp/box64 -B /tmp/box64/build \
+            -DRPI4ARM64=1 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo; \
+        cmake --build /tmp/box64/build --parallel "$(nproc)"; \
+        cmake --install /tmp/box64/build; \
+        box64 --version; \
+        rm -rf /tmp/box64; \
+        apt-get purge -y --auto-remove build-essential cmake git; \
+        rm -rf /var/lib/apt/lists/*; \
+    else \
+        box64 --version || true; \
     fi
 
 # --- Copy cross-compiled RCON binary ---
